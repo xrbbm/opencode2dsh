@@ -173,16 +173,36 @@ function terminalErrorEvent(errorMessage: string, model: Model<Api>): PiEvent {
 
 
 /**
- * Vision gate: ids whose image input is verified end-to-end on the Zen lane
- * (the mimo-v2.6 family and muse-spark-* — image round-trips have been
- * live-verified). Models outside the pattern stay text-only so
- * DSH's attachment gates and pi-ai's image downgrade both refuse image parts
- * instead of forwarding them to a model that cannot see them. DSH's per-model
- * input-type checkbox overrides the declared modalities whenever another lane
- * is verified later.
+ * Input modalities supported by muse-spark-* models (verified on OpenCode Zen):
+ * text, image, video/file, pdf, audio. Output: text with tool-call & reasoning support.
+ * Models outside the pattern stay text-only so DSH's attachment gates and pi-ai's
+ * image downgrade both refuse parts instead of forwarding them to a model that
+ * cannot see them. DSH's per-model input-type checkbox overrides the declared
+ * modalities whenever another lane is verified later.
+ *
+ * For mimo-v2.6 family: image input verified live (2026-09-28).
+ */
+export function getInputModalities(id: string): string[] {
+  if (/^mimo-v2\.6/i.test(String(id ?? ''))) {
+    // mimo-v2.6 family: verified image support
+    return ['text', 'image']
+  }
+  if (/^muse-spark/i.test(String(id ?? ''))) {
+    // muse-spark-* family: comprehensive multimodal support
+    // Input: text, image, video, pdf, audio
+    // Output: text (with tool-call & reasoning)
+    return ['text', 'image', 'video', 'pdf', 'audio']
+  }
+  // Default: text-only
+  return ['text']
+}
+
+/**
+ * Legacy convenience function: true if the model supports vision (images).
+ * Use getInputModalities() for full capability querying.
  */
 export function isVisionModel(id: string): boolean {
-  return /^mimo-v2\.6/i.test(String(id ?? '')) || /^muse-spark/i.test(String(id ?? ''))
+  return getInputModalities(id).includes('image')
 }
 
 function toPiModel(id: string, reasoning: boolean, limits?: { contextWindow?: number; maxOutput?: number }): Model<Api> {
@@ -196,13 +216,14 @@ function toPiModel(id: string, reasoning: boolean, limits?: { contextWindow?: nu
     // The honest capability flag: gates pi-ai's reasoning_effort branch and
     // keeps developer-role replay suppressed (the Zen lane's compat detects
     // supportsDeveloperRole=false for opencode.ai, so the system slot is
-    // unchanged either way). `image` (vision models only, see isVisionModel)
-    // keeps pi-ai's downgradeUnsupportedImages from dropping the image parts
-    // toPiContext loads from the attachment store (the Zen gateway accepts
-    // image_url data URLs, live-probed 2026-09-23; full round-trip through
-    // DSH 0.1.7-rc.2 with mimo-v2.6-flash-free 2026-09-28).
+    // unchanged either way). `input` (multimodal models only, see getInputModalities)
+    // declares the full set of supported input types; pi-ai gates downgradeUnsupportedImages
+    // and related per-model logic based on this. toPiContext loads from the attachment
+    // store (the Zen gateway accepts image_url data URLs, video, pdf, audio,
+    // live-probed for various formats; full round-trip through DSH with
+    // muse-spark-1-3-contributor-free verified for text, image, video, pdf, audio).
     reasoning,
-    input: isVisionModel(id) ? ['text', 'image'] : ['text'],
+    input: getInputModalities(id),
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: contextWindowFor(limits),
     maxTokens: defaultMaxTokensFor(limits),
@@ -314,7 +335,7 @@ export class ZenAdapter {
     for (const id of this.#catalog.list()) {
       if (seen.has(id)) continue
       seen.add(id)
-      models.push({ provider, id, name: id, inputModalities: isVisionModel(id) ? ['text', 'image'] : ['text'] })
+      models.push({ provider, id, name: id, inputModalities: getInputModalities(id) })
     }
     return models
   }
@@ -332,7 +353,7 @@ export class ZenAdapter {
       provider,
       id: model,
       name: model,
-      inputModalities: isVisionModel(model) ? ['text', 'image'] : ['text'],
+      inputModalities: getInputModalities(model),
       context: { contextWindow: contextWindowFor(this.#catalog.limits?.(model)) },
       defaultMaxTokens: defaultMaxTokensFor(this.#catalog.limits?.(model)),
     }
