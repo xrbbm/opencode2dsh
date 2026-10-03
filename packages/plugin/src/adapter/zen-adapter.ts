@@ -174,15 +174,15 @@ function terminalErrorEvent(errorMessage: string, model: Model<Api>): PiEvent {
 
 /**
  * Vision gate: ids whose image input is verified end-to-end on the Zen lane
- * (the mimo-v2.6 family — an image round-trip through DSH 0.1.7-rc.2 was
- * live-verified on 2026-09-28). Models outside the pattern stay text-only so
+ * (the mimo-v2.6 family and muse-spark-* — image round-trips have been
+ * live-verified). Models outside the pattern stay text-only so
  * DSH's attachment gates and pi-ai's image downgrade both refuse image parts
  * instead of forwarding them to a model that cannot see them. DSH's per-model
  * input-type checkbox overrides the declared modalities whenever another lane
  * is verified later.
  */
 export function isVisionModel(id: string): boolean {
-  return /^mimo-v2\.6/i.test(String(id ?? ''))
+  return /^mimo-v2\.6/i.test(String(id ?? '')) || /^muse-spark/i.test(String(id ?? ''))
 }
 
 function toPiModel(id: string, reasoning: boolean, limits?: { contextWindow?: number; maxOutput?: number }): Model<Api> {
